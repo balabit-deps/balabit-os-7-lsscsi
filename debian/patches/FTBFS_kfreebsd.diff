@@ -1,0 +1,32 @@
+From: Guillaume Delacour <gui@iroqwa.org>
+Subject: Fix FTBFS on kfreebsd by removing obsolete include of linux/major.h
+ Linux devices assignement: http://www.kernel.org/doc/Documentation/devices.txt
+ Similar issue on sysstat: http://bugs.debian.org/395038
+
+Updated by Anibal Monsalve Salazar <anibal@debian.org>
+FTBFS on GNU/kFreeBSD and hurd-i386 with the error message:
+lsscsi.c:28:26: fatal error: linux/limits.h: No such file or directory
+If the build system has linux defined then include linux/limits.h
+otherwise include limits.h.
+This is based on a patch by Cyril Brulebois which was posted to Bug#559405
+http://bugs.debian.org/559405
+
+Forwarded: no
+
+Index: lsscsi-0.27/src/lsscsi.c
+===================================================================
+--- lsscsi-0.27.orig/src/lsscsi.c
++++ lsscsi-0.27/src/lsscsi.c
+@@ -25,8 +25,11 @@
+ #include <sys/stat.h>
+ #include <dirent.h>
+ #include <libgen.h>
+-#include <linux/major.h>
++#ifdef linux
+ #include <linux/limits.h>
++#else
++#include <limits.h>
++#endif
+ #include <time.h>
+ #define __STDC_FORMAT_MACROS 1
+ #include <inttypes.h>

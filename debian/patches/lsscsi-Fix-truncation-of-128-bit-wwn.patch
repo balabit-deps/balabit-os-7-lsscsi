@@ -1,0 +1,79 @@
+Description: lsscsi: Fix truncation of 128-bit wwn
+
+From a20b8e3a393d6174171834be75b7f8314a027adb Mon Sep 17 00:00:00 2001
+From: Vaibhav Jain <vaibhav@linux.vnet.ibm.com>
+Date: Thu, 20 Oct 2016 17:19:44 +0530
+Subject: [PATCH] lsscsi: Fix truncation of 128-bit wwn
+
+Currently with '--wwn' flag, 128-bit wwns gets truncated and their
+last 3 hex-digits missing. Below is a comparison of wwn reported by
+lsscsi compared to wwn info at /dev/disk/by-id directory.
+
+% lsscsi -w 0:0:5:0
+[0:0:5:0]    disk    0x60050764008181941000000000000  /dev/sdad
+
+% ls -l /dev/disk/by-id/wwn-*
+lrwxrwxrwx. 1 root root 10 Oct 19 01:08 /dev/disk/by-id/wwn-0x600507640081819410000000000001b1 -> ../../sdad
+
+To fix this, the patch increases the size of member wwn of struct
+disk_wwn_node_entry to 35 chars to accommodate the extra '0x' prefix and
+null terminator. Also the size of the buffer wwn_str thats used to
+output wwn to the std-out is increased to match the corresponding
+member of disk_wwn_node_entry.
+
+Link: https://bugs.launchpad.net/ubuntu/+source/lsscsi/+bug/1636467
+Link: https://bugzilla.redhat.com/show_bug.cgi?id=1387263
+
+Cc: Jon Grimm <jon.grimm@canonical.com>
+Cc: Vipin K Parashar <vipin@linux.vnet.ibm.com>
+Reported-by: Ping Tian Han <pthan@cn.ibm.com>
+Signed-off-by: Vaibhav Jain <vaibhav@linux.vnet.ibm.com>
+---
+ src/lsscsi.c | 16 +++++++++++++---
+ 1 file changed, 13 insertions(+), 3 deletions(-)
+
+Forwarded: yes, https://github.com/hreinecke/lsscsi/pull/1
+Origin: https://github.com/hreinecke/lsscsi/pull/1/commits/a20b8e3a393d6174171834be75b7f8314a027adb
+Bug: https://github.com/hreinecke/lsscsi/issues/2
+Bug-Debian: 867868
+Bug-Ubuntu: https://bugs.launchpad.net/bugs/1636467
+Last-Update: 2017-07-10
+--- a/src/lsscsi.c
++++ b/src/lsscsi.c
+@@ -200,8 +200,17 @@
+ };
+ static struct dev_node_list* dev_node_listhead = NULL;
+ 
++/* WWN here is extracted from /dev/disk/by-id/wwn-<WWN> which is
++ * created by udev 60-persistent-storage.rules using ID_WWN_WITH_EXTENSION.
++ * The udev ID_WWN_WITH_EXTENSION is the combination of char wwn[17] and
++ * char wwn_vendor_extension[17] from struct scsi_id_device. This macro
++ * defines the maximum length of char-array needed to store this wwn including
++ * the null-terminator.
++ */
++#define DISK_WWN_MAX_LEN 35
++
+ struct disk_wwn_node_entry {
+-       char wwn[32];
++       char wwn[DISK_WWN_MAX_LEN]; /* '0x' + wwn<128-bit> + <null-terminator> */
+        char disk_bname[12];
+ };
+ 
+@@ -2565,14 +2574,15 @@
+                 }
+                 if (wd[0]) {
+                         char dev_node[LMAX_NAME] = "";
+-                        char wwn_str[34];
++                        char wwn_str[DISK_WWN_MAX_LEN];
+                         enum dev_type typ;
+ 
+                         typ = (FT_BLOCK == non_sg.ft) ? BLK_DEV : CHR_DEV;
+                         if (get_wwn) {
+                                 if ((BLK_DEV == typ) &&
+                                     get_disk_wwn(wd, wwn_str, sizeof(wwn_str)))
+-                                        printf("%-30s  ", wwn_str);
++                                        printf("%-*s  ", DISK_WWN_MAX_LEN - 1,
++                                               wwn_str);
+                                 else
+                                         printf("                          "
+                                                "      ");
